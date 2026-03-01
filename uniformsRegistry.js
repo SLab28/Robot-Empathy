@@ -21,6 +21,8 @@ export const uniforms = {
 
   // Audio reactivity (Phase 6+)
   audioAmp:        { value: 0.0 },
+  sphereAudioLevel:{ value: 0.0 },
+  sphereAudioTimbre:{ value: 0.0 },
 
   // WebXR light estimation (updated per XR frame when available)
   xrLightColor:    { value: new THREE.Color(1.0, 1.0, 1.0) },

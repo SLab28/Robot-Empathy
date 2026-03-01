@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { createScene, updateUniforms } from './scene.js';
-import { loadPointCloud } from './point-cloud-loader.js';
+import { loadPointCloud, createBubbleOceanEnvironment, createSpiritFireflies } from './point-cloud-loader.js';
 import { startMarkerTracking, waitForMarkerDetection } from './marker-tracking.js';
 import {
   isWebXRSupported,
@@ -26,6 +26,99 @@ const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
 let scene, camera, renderer;
 let treeData = null;
 let treePlaced = false;
+let oceanEnvironment = null;
+let spiritFireflies = null;
+
+let audioContext = null;
+let analyser = null;
+let freqData = null;
+let timeData = null;
+let audioStarted = false;
+let lastAudioDebugTs = 0;
+let audioReactiveRampStartTs = 0;
+
+function smoothstep(min, max, value) {
+  const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  return x * x * (3 - 2 * x);
+}
+
+async function initVoiceAudioReactivity() {
+  if (audioStarted) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    console.warn('[Audio] getUserMedia unavailable');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    audioContext = new Ctx();
+    const source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.82;
+    source.connect(analyser);
+
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    timeData = new Uint8Array(analyser.fftSize);
+    audioStarted = true;
+    audioReactiveRampStartTs = performance.now();
+    console.log('[Audio] Voice reactivity initialised');
+  } catch (err) {
+    console.warn('[Audio] Voice capture not available:', err?.message || err);
+  }
+}
+
+function updateVoiceAudioUniforms() {
+  if (!analyser || !freqData || !timeData) return;
+
+  analyser.getByteTimeDomainData(timeData);
+  analyser.getByteFrequencyData(freqData);
+
+  // Loudness via RMS
+  let sumSq = 0;
+  for (let i = 0; i < timeData.length; i++) {
+    const x = (timeData[i] - 128) / 128;
+    sumSq += x * x;
+  }
+  const rms = Math.sqrt(sumSq / timeData.length);
+  const loudness = Math.min(1.0, smoothstep(0.008, 0.12, rms) * 1.6);
+
+  // Timbre proxy via spectral centroid (0..1)
+  let weighted = 0;
+  let total = 0;
+  for (let i = 0; i < freqData.length; i++) {
+    const m = freqData[i] / 255;
+    weighted += i * m;
+    total += m;
+  }
+  const centroid = total > 0.0001 ? (weighted / total) / (freqData.length - 1) : 0.0;
+  const timbre = smoothstep(0.08, 0.92, centroid);
+
+  const elapsed = Math.max(0, performance.now() - audioReactiveRampStartTs);
+  const ramp = smoothstep(0, 2200, elapsed);
+  const easedLoudness = loudness * ramp;
+  const easedTimbre = timbre * ramp;
+
+  uniforms.sphereAudioLevel.value = THREE.MathUtils.lerp(uniforms.sphereAudioLevel.value, easedLoudness, 0.28);
+  uniforms.sphereAudioTimbre.value = THREE.MathUtils.lerp(uniforms.sphereAudioTimbre.value, easedTimbre, 0.18);
+
+  const now = performance.now();
+  if (now - lastAudioDebugTs > 350) {
+    lastAudioDebugTs = now;
+    console.log(
+      `[AudioDebug] rms=${rms.toFixed(4)} loudness=${loudness.toFixed(3)} timbre=${timbre.toFixed(3)} ramp=${ramp.toFixed(3)} ` +
+      `uLevel=${uniforms.sphereAudioLevel.value.toFixed(3)} uTimbre=${uniforms.sphereAudioTimbre.value.toFixed(3)}`
+    );
+  }
+}
 
 // --- UI helpers ---
 const ui = {
@@ -153,23 +246,23 @@ function initModeToggle(runningMode, webxrSupported) {
 // Phase 0: Load assets
 // ─────────────────────────────────────────────
 async function loadAssets() {
-  setLoadingText('Loading point cloud…');
+  setLoadingText('Loading sphere shader…');
   const t0 = performance.now();
 
   treeData = await loadPointCloud(TREE_PLY_URL, {
     onProgress: (event) => {
       if (event.lengthComputable) {
         const pct = Math.min(Math.round((event.loaded / event.total) * 100), 99);
-        setLoadingText(`Loading point cloud… ${pct}%`);
+        setLoadingText(`Loading sphere shader… ${pct}%`);
       } else if (event.loaded) {
         const mb = (event.loaded / (1024 * 1024)).toFixed(1);
-        setLoadingText(`Loading point cloud… ${mb} MB`);
+        setLoadingText(`Loading sphere shader… ${mb} MB`);
       }
     },
   });
 
   const dt = performance.now() - t0;
-  console.log(`[HIDDEN] Point cloud loaded in ${dt.toFixed(0)}ms`);
+  console.log(`[HIDDEN] Sphere shader loaded in ${dt.toFixed(0)}ms`);
 }
 
 // ─────────────────────────────────────────────
@@ -211,7 +304,7 @@ function waitForUserTapAndStartAR() {
     btn.style.transition = 'opacity 1s ease-in-out';
     
     // Type out the instructions
-    const instructionText = 'Hello stranger. Turn around and stand outside of the white square. Point your camera and align the pointer with the marker on the floor. Tap when aligned. Enjoy the tree.';
+    const instructionText = 'Hello Stranger. Wellcome to the Replay Theatre.';
     
     await typeText(instructionText, statusEl, 80);
     
@@ -237,6 +330,7 @@ function waitForUserTapAndStartAR() {
       // IMPORTANT: keep requestSession call in this click task to preserve
       // Chrome's transient user activation requirement for immersive-ar.
       try {
+        await initVoiceAudioReactivity();
         await startWorldAR();
       } catch (err) {
         console.error('[HIDDEN] WebXR failed:', err);
@@ -276,8 +370,8 @@ async function startWorldAR() {
     },
   });
 
-  // Update status once session is live - reticle will appear softly
-  setArStatus('Align the white square with the marker on the floor, then tap to place the tree');
+  // Session auto-places the sphere right after start
+  setArStatus('');
 
   // Request wake lock to prevent screen dimming
   await requestWakeLock();
@@ -296,12 +390,13 @@ function placeTree(hitPose) {
 
   const { points } = treeData;
 
-  // The mesh already has centering offset (points.position) and normalised scale
-  // from the loader. We ADD the hit-test position on top of the existing offset.
-  const floorOffset = 1.05;
-  points.position.x += hitPose.position.x;
-  points.position.y += hitPose.position.y - floorOffset;
-  points.position.z += hitPose.position.z;
+  // Position shader sphere directly at hit-test pose.
+  const floorOffset = treeData.floorOffset ?? 0.0;
+  points.position.set(
+    hitPose.position.x,
+    hitPose.position.y - floorOffset,
+    hitPose.position.z
+  );
 
   scene.add(points);
   console.log('[HIDDEN] Tree added to scene, total children:', scene.children.length);
@@ -376,6 +471,13 @@ async function startMarkerAnchoredMode() {
 // ─────────────────────────────────────────────
 function updateAnimations() {
   updateUniforms();
+
+  updateVoiceAudioUniforms();
+
+  // Update ocean planar reflection pass (from frame_bubble environment).
+  if (oceanEnvironment?.userData?.updateReflection) {
+    oceanEnvironment.userData.updateReflection(renderer, scene, camera);
+  }
 }
 
 /**
@@ -430,6 +532,14 @@ async function init() {
   try {
     await loadAssets();
     setLoadingText('Assets loaded ✓');
+
+    // Immersive environment from frame_bubble
+    oceanEnvironment = createBubbleOceanEnvironment();
+    scene.add(oceanEnvironment);
+
+    // Subtle spirit-like fireflies
+    spiritFireflies = createSpiritFireflies(95);
+    scene.add(spiritFireflies);
   } catch (err) {
     console.error('[HIDDEN] Asset load failed:', err);
     setLoadingText('Failed to load assets');

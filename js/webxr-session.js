@@ -46,8 +46,8 @@ export async function isWebXRSupported() {
   }
   
   try {
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    console.log('[WebXR] immersive-ar supported:', supported);
+    const supported = await navigator.xr.isSessionSupported('immersive-vr');
+    console.log('[WebXR] immersive-vr supported:', supported);
     
     // For emulators, also check if requestSession is available
     const canRequest = typeof navigator.xr.requestSession === 'function';
@@ -86,7 +86,7 @@ function createReticle(size = 0.35) {
 }
 
 /**
- * Start a WebXR immersive-ar session with hit-test reticle and tap-to-place.
+ * Start a WebXR immersive-vr session with auto-placement.
  *
  * @param {THREE.WebGLRenderer} renderer
  * @param {THREE.Scene} scene
@@ -101,8 +101,8 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
   const arStatus = document.getElementById('ar-status');
 
   // Build feature lists with reference space negotiation
-  const requiredFeatures = ['hit-test'];
-  const optionalFeatures = ['dom-overlay', 'local-floor', 'local', 'viewer', 'light-estimation'];
+  const requiredFeatures = [];
+  const optionalFeatures = ['dom-overlay', 'unbounded', 'local-floor', 'local', 'viewer'];
   const sessionInit = {
     requiredFeatures,
     optionalFeatures,
@@ -114,11 +114,11 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
   }
 
   // Request session
-  console.log('[WebXR] Requesting immersive-ar session…');
+  console.log('[WebXR] Requesting immersive-vr session…');
   console.log('[WebXR] Session init:', sessionInit);
   
   try {
-    xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
+    xrSession = await navigator.xr.requestSession('immersive-vr', sessionInit);
     console.log('[WebXR] Session started successfully');
     console.log('[WebXR] Session environment integration:', xrSession.environmentIntegration);
   } catch (err) {
@@ -130,7 +130,7 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
 
   // Show DOM overlay
   if (arOverlay) arOverlay.classList.remove('hidden');
-  if (arStatus) arStatus.textContent = 'Scanning floor…';
+  if (arStatus) arStatus.textContent = 'Positioning sphere…';
 
   // Prevent anything from hiding the DOM overlay root during WebXR
   let overlayObserver = null;
@@ -161,10 +161,9 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     throw err;
   }
 
-  // Get reference space with fallback logic for mobile compatibility
+  // Prefer unbounded space for vast/infinite-feel VR environments.
   async function getReferenceSpace(session) {
-    // Prefer 'local' for mobile compatibility, then 'local-floor', then 'viewer'
-    const types = ['local', 'local-floor', 'viewer']; // mobile-first order
+    const types = ['unbounded', 'local-floor', 'local', 'viewer'];
     for (const type of types) {
       try {
         const refSpace = await session.requestReferenceSpace(type);
@@ -184,59 +183,18 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     throw err;
   }
 
-  // Hit-test source (ray from screen centre)
-  try {
-    hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-    console.log('[WebXR] Hit-test source created');
-  } catch (err) {
-    console.warn('[WebXR] Hit-test not available:', err);
-  }
-
-  // Light estimation (optional)
+  // VR mode: use neutral light defaults (no AR light-estimation probe).
   xrLightProbe = null;
-  try {
-    xrLightProbe = await xrSession.requestLightProbe();
-    console.log('[WebXR] Light estimation enabled');
-  } catch (err) {
-    console.warn('[WebXR] Light estimation unavailable:', err?.name || err);
-    uniforms.xrLightIntensity.value = 1.0;
-    uniforms.xrLightColor.value.set(1, 1, 1);
-  }
+  uniforms.xrLightIntensity.value = 1.0;
+  uniforms.xrLightColor.value.set(1, 1, 1);
 
-  // Create reticle and add to scene
-  _reticle = createReticle(0.35);
+  // Auto-placement state
   _currentHitPose = null;
-  scene.add(_reticle);
-  console.log('[WebXR] Reticle created and added to scene, visible:', _reticle.visible);
-
-  // Tap-to-place via XR 'select' event (fires on screen tap in immersive-ar)
   let placed = false;
-  xrSession.addEventListener('select', () => {
-    if (placed || !_currentHitPose) return;
-    placed = true;
-    console.log('[WebXR] Tap-to-place triggered');
-
-    // Remove reticle
-    scene.remove(_reticle);
-    _reticle.geometry.dispose();
-    _reticle.material.dispose();
-    _reticle = null;
-
-    // Notify caller
-    if (callbacks.onPlace) {
-      callbacks.onPlace(_currentHitPose);
-    }
-  });
 
   // Session end handler
   xrSession.addEventListener('end', () => {
     console.log('[WebXR] Session ended');
-    if (_reticle) {
-      scene.remove(_reticle);
-      _reticle.geometry.dispose();
-      _reticle.material.dispose();
-      _reticle = null;
-    }
     xrSession = null;
     hitTestSource = null;
     referenceSpace = null;
@@ -270,65 +228,33 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
       return;
     }
 
-    // Process hit-test → move reticle
-    if (hitTestSource && _reticle) {
-      const results = frame.getHitTestResults(hitTestSource);
-      if (results.length > 0) {
-        const hit = results[0];
-        const pose = hit.getPose(referenceSpace);
-        if (pose) {
-          if (!_reticle.visible) {
-            console.log('[WebXR] First hit-test result, showing reticle');
-          }
-          _reticle.visible = true;
-          
-          // Position reticle on detected surface
-          const adjustedY = pose.transform.position.y; // No adjustment - use original floor level
-          _reticle.position.set(
-            pose.transform.position.x,
-            adjustedY,
-            pose.transform.position.z
-          );
-          
-          // Align reticle with surface normal and lay flat on floor
-          // The hit pose orientation represents the detected surface orientation
-          const hitQuaternion = new THREE.Quaternion(
-            pose.transform.orientation.x,
-            pose.transform.orientation.y,
-            pose.transform.orientation.z,
-            pose.transform.orientation.w
-          );
-          
-          // Apply the surface orientation to the reticle
-          _reticle.quaternion.copy(hitQuaternion);
-          
-          // Ensure the reticle lies flat by applying an additional -90° rotation on X axis
-          // This makes the square face-up on the detected surface
-          const flatRotation = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(1, 0, 0), 
-            -Math.PI / 2
-          );
-          _reticle.quaternion.multiplyQuaternions(flatRotation, _reticle.quaternion);
+    // Auto-place once: 1.5m in front of viewer, 1.6m high.
+    if (!placed) {
+      const viewerPose = frame.getViewerPose(referenceSpace);
+      if (viewerPose && viewerPose.views && viewerPose.views.length > 0) {
+        const t = viewerPose.transform;
+        const q = new THREE.Quaternion(
+          t.orientation.x,
+          t.orientation.y,
+          t.orientation.z,
+          t.orientation.w
+        );
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(q).normalize();
 
-          _currentHitPose = {
-            position: {
-              x: pose.transform.position.x,
-              y: pose.transform.position.y, // Use original Y for tree placement
-              z: pose.transform.position.z
-            },
-            orientation: pose.transform.orientation,
-            matrix: pose.transform.matrix,
-          };
-        }
-      } else {
-        if (_reticle.visible) {
-          console.log('[WebXR] No hit-test results, hiding reticle');
-        }
-        _reticle.visible = false;
-        _currentHitPose = null;
+        _currentHitPose = {
+          position: {
+            x: t.position.x + forward.x * 1.5,
+            y: 1.6,
+            z: t.position.z + forward.z * 1.5,
+          },
+          orientation: t.orientation,
+          matrix: t.matrix,
+        };
+
+        placed = true;
+        console.log('[WebXR] Auto-placed object in front of viewer');
+        if (callbacks.onPlace) callbacks.onPlace(_currentHitPose);
       }
-    } else {
-      // After tree placement, both are null — this is expected, no logging needed
     }
 
     // Update animation uniforms from app loop
@@ -336,8 +262,8 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
       window.updateAnimations();
     }
 
-    // Update shader light response from WebXR light estimation
-    updateXRLightUniforms(frame);
+    // Update shader light response from WebXR light estimation (AR-only path)
+    if (xrLightProbe) updateXRLightUniforms(frame);
     
     renderer.render(scene, camera);
   };
