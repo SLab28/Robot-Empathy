@@ -531,19 +531,26 @@ export function createBubbleOceanEnvironment() {
     oceanMat.uniforms.uReflectMatrix.value.copy(reflTexMatrix);
 
     reflClipPlane.set(new THREE.Vector3(0, 1, 0), -oceanY);
-    renderer.clippingPlanes = [reflClipPlane];
+    const prevClippingPlanes = renderer.clippingPlanes;
+    const prevTarget = renderer.getRenderTarget();
+    const prevXrEnabled = renderer.xr.enabled;
 
+    renderer.clippingPlanes = [reflClipPlane];
+    renderer.xr.enabled = false;
     oceanMesh.visible = false;
     haloMesh.visible = false;
 
-    renderer.setRenderTarget(reflTarget);
-    renderer.clear();
-    renderer.render(scene, reflCam);
-    renderer.setRenderTarget(null);
-
-    renderer.clippingPlanes = [];
-    oceanMesh.visible = true;
-    haloMesh.visible = true;
+    try {
+      renderer.setRenderTarget(reflTarget);
+      renderer.clear();
+      renderer.render(scene, reflCam);
+    } finally {
+      renderer.setRenderTarget(prevTarget);
+      renderer.xr.enabled = prevXrEnabled;
+      renderer.clippingPlanes = prevClippingPlanes;
+      oceanMesh.visible = true;
+      haloMesh.visible = true;
+    }
   };
 
   envGroup.userData.dispose = () => {

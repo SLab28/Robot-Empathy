@@ -223,7 +223,7 @@ function initModeToggle(runningMode, webxrSupported) {
   btn.textContent = runningMode === 'marker' ? 'Marker' : 'WebXR';
 
   if (!webxrSupported) {
-    btn.title = 'WebXR immersive-ar not supported on this device';
+    btn.title = 'WebXR immersive-vr not supported on this device';
     btn.disabled = true;
     btn.style.opacity = '0.6';
     btn.onclick = null;
@@ -287,7 +287,7 @@ async function detectMarker() {
 // Phase 2: WebXR world-tracked session (reticle + tap-to-place)
 // ─────────────────────────────────────────────
 /**
- * Wait for user to tap the 'Enter AR' button.
+ * Wait for user to tap the 'Enter VR' button.
  * This tap provides the user gesture required by Chrome for requestSession.
  * Returns a Promise that resolves when the button is tapped.
  */
@@ -328,7 +328,7 @@ function waitForUserTapAndStartAR() {
       }, 1000);
 
       // IMPORTANT: keep requestSession call in this click task to preserve
-      // Chrome's transient user activation requirement for immersive-ar.
+      // Chrome's transient user activation requirement for immersive-vr.
       try {
         await initVoiceAudioReactivity();
         await startWorldAR();
@@ -348,7 +348,7 @@ function waitForUserTapAndStartAR() {
 
 async function startWorldAR() {
   console.log('[HIDDEN] Starting WebXR…');
-  setArStatus('Starting AR…');
+  setArStatus('Starting VR…');
 
   // Reset tree state for clean WebXR session
   treePlaced = false;

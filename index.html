@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>HIDDEN — AR Point Cloud Experience</title>
+  <title>HIDDEN — VR Experience</title>
   <link rel="stylesheet" href="css/main.css">
 
   <!-- Three.js r160 via CDN (importmap MUST precede any type="module" script) -->
@@ -27,7 +27,7 @@
   <div id="ar-overlay" class="ar-overlay hidden">
     <div class="ar-overlay-content">
       <p id="ar-status" class="ar-status"></p>
-      <button id="ar-start-btn" class="ar-start-btn hidden">Tap to enter AR</button>
+      <button id="ar-start-btn" class="ar-start-btn hidden">Tap to enter VR</button>
     </div>
   </div>
 
@@ -35,8 +35,8 @@
 
   <!-- Fallback for unsupported devices -->
   <div id="fallback-message" class="fallback-message hidden">
-    <p>This device does not support AR.</p>
-    <p>Please use Chrome on an ARCore-compatible Android device.</p>
+    <p>This device does not support immersive VR.</p>
+    <p>Please use a WebXR-compatible browser on your headset or device.</p>
   </div>
 
   <script type="module" src="js/app.js"></script>

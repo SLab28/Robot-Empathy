@@ -102,16 +102,11 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
 
   // Build feature lists with reference space negotiation
   const requiredFeatures = [];
-  const optionalFeatures = ['dom-overlay', 'unbounded', 'local-floor', 'local', 'viewer'];
+  const optionalFeatures = ['unbounded', 'local-floor', 'local', 'viewer'];
   const sessionInit = {
     requiredFeatures,
     optionalFeatures,
   };
-
-  // Attach DOM overlay if element exists
-  if (arOverlay) {
-    sessionInit.domOverlay = { root: arOverlay };
-  }
 
   // Request session
   console.log('[WebXR] Requesting immersive-vr session…');
@@ -128,22 +123,14 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     throw err;
   }
 
-  // Show DOM overlay
-  if (arOverlay) arOverlay.classList.remove('hidden');
-  if (arStatus) arStatus.textContent = 'Positioning sphere…';
-
-  // Prevent anything from hiding the DOM overlay root during WebXR
-  let overlayObserver = null;
+  // Enter full immersive VR: hide browser UI overlay once session starts.
   if (arOverlay) {
-    overlayObserver = new MutationObserver(() => {
-      if (arOverlay.style.display === 'none' || arOverlay.classList.contains('hidden')) {
-        arOverlay.classList.remove('hidden');
-        arOverlay.style.display = '';
-        console.warn('[WebXR] Prevented DOM overlay root from being hidden');
-      }
-    });
-    overlayObserver.observe(arOverlay, { attributes: true, attributeFilter: ['class', 'style'] });
+    arOverlay.classList.add('hidden');
+    arOverlay.style.opacity = '';
+    arOverlay.style.pointerEvents = '';
+    arOverlay.style.transition = '';
   }
+  if (arStatus) arStatus.textContent = '';
 
   // Enable XR on renderer now (not earlier — interferes with Phase 1 canvas)
   renderer.xr.enabled = true;
@@ -206,12 +193,7 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     // Release wake lock when session ends
     releaseWakeLock();
     
-    // Disconnect overlay observer
-    if (overlayObserver) {
-      overlayObserver.disconnect();
-    }
-    
-    // Restore DOM overlay root visibility for potential re-entry
+    // Restore overlay style state for potential re-entry
     if (arOverlay) {
       arOverlay.style.opacity = '';
       arOverlay.style.pointerEvents = '';
