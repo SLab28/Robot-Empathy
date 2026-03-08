@@ -26,7 +26,7 @@ export function createScene() {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.setClearColor(0x000000, 0.0);
+  renderer.setClearColor(0x000000, 1.0);
   document.body.appendChild(renderer.domElement);
 
   // Resize handler (only applies outside XR session)

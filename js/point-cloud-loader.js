@@ -240,60 +240,51 @@ float fbm(vec2 p, int oct){
   return v;
 }
 
-vec3 palette(float t){
-  vec3 a = vec3(0.14, 0.04, 0.28);
-  vec3 b = vec3(0.10, 0.05, 0.16);
-  vec3 c = vec3(1.00, 1.00, 1.00);
-  vec3 d = vec3(0.60, 0.80, 0.40);
-  return max(a + b * cos(TAU * (c * t + d)), vec3(0.0));
-}
-
 void main(){
-  float tt = time * 0.18;
-  vec2  uv = vWorldPos.xz * 0.28;
+  // Discard fragments inside the sphere's vertical column
+  float distFromAxis = length(vWorldPos.xz);
+  if (distFromAxis < bubbleRadius * 0.98) discard;
 
-  vec2 q = vec2(fbm(uv + tt * vec2(0.40, 0.30), 6),
-                fbm(uv + tt * vec2(-0.35,0.45) + vec2(5.2,1.3), 6));
-  vec2 r = vec2(fbm(uv + 4.0*q + tt*vec2( 0.15,-0.20) + vec2(1.7,9.2), 6),
-                fbm(uv + 4.0*q + tt*vec2(-0.22, 0.18) + vec2(8.3,2.8), 6));
-  float f = fbm(uv + 4.0 * r, 6);
+  float tt  = time * 0.18;
+  vec2  uv  = vWorldPos.xz * 0.28;
 
-  float hue = f * 0.55 + length(r) * 0.25 + tt * 0.10;
-  vec3 col = palette(hue);
-
-  float vein1 = pow(max(0.0, fbm(uv * 1.5 + q * 2.0 + tt * 0.5, 4)), 3.5);
-  float vein2 = pow(max(0.0, fbm(uv * 2.5 - r * 1.5 + tt * 0.3, 4)), 4.0);
-  col += vec3(0.28, 0.05, 0.55) * vein1 * 0.9;
-  col += vec3(0.18, 0.02, 0.38) * vein2 * 0.7;
-
-  float glint = pow(max(0.0, vWave * 12.0 + 0.3), 3.0);
-  col += vec3(0.60, 0.45, 0.90) * glint * 0.5;
-
+  // Planar reflection UV
   vec2 reflUV = vReflCoord.xy / vReflCoord.w;
-  float px = n2(uv * 2.8 + vec2(tt * 0.32, 0.0)) * 2.0 - 1.0;
-  float py = n2(uv * 2.8 + vec2(0.0, tt * 0.27) + vec2(5.1)) * 2.0 - 1.0;
-  reflUV += vec2(px, py) * 0.022 + vec2(vWave * 8.0) * 0.018;
-  reflUV = clamp(reflUV, 0.001, 0.999);
+
+  // Gentle ripple distortion
+  float px = n2(uv * 2.4 + vec2(tt * 0.28, 0.0)) * 2.0 - 1.0;
+  float py = n2(uv * 2.4 + vec2(0.0, tt * 0.22) + vec2(5.1)) * 2.0 - 1.0;
+  reflUV  += vec2(px, py) * 0.014 + vec2(vWave * 6.0) * 0.012;
+  reflUV   = clamp(reflUV, 0.001, 0.999);
+
   vec3 reflColor = texture2D(uReflection, reflUV).rgb;
 
-  vec3 viewDir = normalize(cameraPosition - vWorldPos);
+  // Fresnel (Schlick)
+  vec3  viewDir  = normalize(cameraPosition - vWorldPos);
   float cosTheta = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
-  float fresnel = mix(0.85, 0.04, cosTheta);
+  float r0      = 0.15;
+  float fresnel = r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 
-  vec3 tintedRefl = mix(reflColor, reflColor * palette(hue + 0.15) * 1.2, 0.30);
-  col = mix(col, tintedRefl, fresnel * 0.78);
+  // Surface colour: pure reflection, faint cool-white tint
+  vec3 waterTint = vec3(0.94, 0.97, 1.00);
+  vec3 col = mix(waterTint, reflColor, 0.97);
 
-  float dist = length(vWorldPos.xz);
-  float fog  = smoothstep(3.0, 18.0, dist);
-  col = mix(col, vec3(0.04, 0.01, 0.08), fog);
+  // Tiny specular glint on wave crests
+  float glint = pow(max(0.0, vWave * 14.0 + 0.2), 4.0);
+  col += vec3(1.0) * glint * 0.15;
 
-  float halo = 1.0 - smoothstep(0.0, bubbleRadius * 2.2, dist);
-  col += vec3(0.06, 0.02, 0.14) * halo * 0.8;
-
-  col *= 0.80;
-
+  // Edge fade
+  float dist     = length(vWorldPos.xz);
   float edgeFade = 1.0 - smoothstep(14.0, 20.0, dist);
-  gl_FragColor = vec4(clamp(col, 0.0, 1.0), edgeFade * 0.93);
+
+  // Alpha driven by Fresnel: transparent center, mirror at edges
+  float alpha = clamp(fresnel + 0.12, 0.0, 0.96) * edgeFade;
+
+  // Smooth the hole edge left by the discard above
+  float holeEdge = smoothstep(bubbleRadius * 0.98, bubbleRadius * 1.10, distFromAxis);
+  alpha *= holeEdge;
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), alpha);
 }
 `;
 
@@ -319,31 +310,112 @@ void main(){
   float r = length(uv);
   if (r > 1.0) discard;
 
-  vec3 colZenith  = vec3(0.04, 0.01, 0.10);
-  vec3 colMid     = vec3(0.16, 0.04, 0.34);
-  vec3 colHorizon = vec3(0.48, 0.20, 0.72);
-  vec3 colMist    = vec3(0.72, 0.55, 0.88);
+  vec3 colInner   = vec3(0.85, 0.82, 0.95);
+  vec3 colMid     = vec3(0.78, 0.76, 0.92);
+  vec3 colOuter   = vec3(0.70, 0.72, 0.88);
 
   vec3 col;
   if (r < 0.45) {
     float t = r / 0.45;
     t = t * t;
-    col = mix(colZenith, colMid, t);
+    col = mix(colInner, colMid, t);
   } else {
     float t = (r - 0.45) / 0.55;
     t = smoothstep(0.0, 1.0, t);
-    col = mix(colMid, mix(colHorizon, colMist, t * t), t);
+    col = mix(colMid, colOuter, t);
   }
 
   float angle = atan(uv.y, uv.x) / TAU;
   float shimmer = n2(vec2(angle * 6.0 + time * 0.04, r * 3.0)) * 0.5 + 0.5;
   float shimBand = smoothstep(0.5, 0.7, r) * (1.0 - smoothstep(0.85, 1.0, r));
-  col += vec3(0.30, 0.10, 0.50) * shimmer * shimBand * 0.18;
+  col += vec3(0.80, 0.75, 0.95) * shimmer * shimBand * 0.10;
 
-  float alpha = smoothstep(0.10, 0.55, r) * (1.0 - smoothstep(0.80, 1.00, r)) * 0.55;
+  float alpha = smoothstep(0.10, 0.55, r) * (1.0 - smoothstep(0.80, 1.00, r)) * 0.30;
   gl_FragColor = vec4(col * alpha, alpha);
 }
 `;
+
+// ── Sky dome — soft pastel blob gradient (matching p5.js piece aesthetic) ──
+const skyVertSrc = `
+varying vec3 vDir;
+void main() {
+    vDir = normalize(position);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const skyFragSrc = `
+precision highp float;
+#define TAU 6.28318530718
+uniform float time;
+
+varying vec3 vDir;
+
+vec3 hsb2rgb(float h, float s, float b) {
+    h = fract(h / 360.0);
+    vec3 rgb = clamp(abs(fract(h + vec3(0.0,2.0,4.0)/6.0)*6.0-3.0)-1.0, 0.0,1.0);
+    return b * mix(vec3(1.0), rgb, s);
+}
+
+float blob(vec3 dir, vec3 centre, float r) {
+    float d = length(dir - centre);
+    return exp(-4.0 * d * d / (r * r));
+}
+
+float drift(float seed, float t) {
+    return sin(t * 0.11 + seed * TAU) * 0.18 + cos(t * 0.07 + seed * 2.1) * 0.12;
+}
+
+void main() {
+    vec3 d = normalize(vDir);
+
+    float T       = time * 0.4;
+    float baseHue = 240.0 + T * 8.0;
+
+    vec3  bg = hsb2rgb(baseHue, 0.05, 0.97);
+
+    float blobHue  = baseHue + 120.0;
+    float blobSat  = 0.60;
+    float blobBri  = 1.00;
+
+    vec3 bCentres[5];
+    float seeds[5];
+    seeds[0] = 0.13; seeds[1] = 0.37; seeds[2] = 0.61;
+    seeds[3] = 0.79; seeds[4] = 0.97;
+
+    float totalW = 0.0;
+    vec3  totalC = vec3(0.0);
+
+    for (int i = 0; i < 5; i++) {
+        float s = seeds[i];
+        float phi   = s * TAU;
+        float theta = s * 2.83 - 0.9;
+        vec3 base   = vec3(cos(theta)*cos(phi), sin(theta), cos(theta)*sin(phi));
+
+        float dx = drift(s,        T + float(i)*0.4);
+        float dy = drift(s + 0.5,  T + float(i)*0.7);
+        float dz = drift(s + 0.25, T + float(i)*0.55);
+        vec3  centre = normalize(base + vec3(dx, dy, dz) * 0.35);
+
+        float hOff = float(i) * 28.0;
+        float sz   = 0.55 + s * 0.40;
+
+        float w = blob(d, centre, sz);
+        totalC += w * hsb2rgb(blobHue + hOff, blobSat, blobBri);
+        totalW += w;
+    }
+
+    float blobAlpha = clamp(totalW, 0.0, 1.0);
+    vec3  blobCol   = totalW > 0.001 ? totalC / totalW : bg;
+
+    blobAlpha = smoothstep(0.0, 0.85, blobAlpha) * 0.72;
+
+    vec3 col = mix(bg, blobCol, blobAlpha);
+
+    float vig = 1.0 - 0.08 * (1.0 - abs(d.y));
+    col *= vig;
+
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
 
 const reflTexMatrix = new THREE.Matrix4();
 const reflClipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -496,10 +568,24 @@ export function createBubbleOceanEnvironment() {
   const reflCam = new THREE.PerspectiveCamera();
   oceanMat.uniforms.uReflection.value = reflTarget.texture;
 
+  // ── Sky dome ────────────────────────────────────────────────────────────
+  const skyGeo = new THREE.SphereGeometry(50, 48, 24);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    depthTest: false,
+    uniforms: { time: uniforms.time },
+    vertexShader: skyVertSrc,
+    fragmentShader: skyFragSrc,
+  });
+  const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  skyMesh.renderOrder = -1000;
+  skyMesh.frustumCulled = false;
+
   const envGroup = new THREE.Group();
   envGroup.name = 'bubble-ocean-environment';
+  envGroup.add(skyMesh);
   envGroup.add(oceanMesh);
-  envGroup.add(haloMesh);
 
   envGroup.userData.updateReflection = (renderer, scene, camera) => {
     if (!renderer || !scene || !camera) return;
@@ -538,7 +624,6 @@ export function createBubbleOceanEnvironment() {
     renderer.clippingPlanes = [reflClipPlane];
     renderer.xr.enabled = false;
     oceanMesh.visible = false;
-    haloMesh.visible = false;
 
     try {
       renderer.setRenderTarget(reflTarget);
@@ -549,16 +634,15 @@ export function createBubbleOceanEnvironment() {
       renderer.xr.enabled = prevXrEnabled;
       renderer.clippingPlanes = prevClippingPlanes;
       oceanMesh.visible = true;
-      haloMesh.visible = true;
     }
   };
 
   envGroup.userData.dispose = () => {
     reflTarget.dispose();
     oceanGeo.dispose();
-    haloGeo.dispose();
+    skyGeo.dispose();
     oceanMat.dispose();
-    haloMat.dispose();
+    skyMat.dispose();
   };
 
   return envGroup;
