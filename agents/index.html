@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Empathetic Robot</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0e14;
+      --surface: #141620;
+      --surface-2: #1a1d2e;
+      --border: #262a3d;
+      --text: #e2e4ec;
+      --text-dim: #8b8fa4;
+      --eeg: #60a5fa;
+      --context: #a78bfa;
+      --affective: #f472b6;
+      --master: #34d399;
+      --gate-open: #34d399;
+      --gate-closed: #ef4444;
+      --warning: #f59e0b;
+      --accent: #818cf8;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ═══ LAYOUT ═══ */
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+
+    /* ═══ HEADER ═══ */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--eeg), var(--affective));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+
+    .logo-text {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .conn-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #555;
+      transition: background 0.3s;
+    }
+
+    .conn-dot.connected { background: var(--gate-open); }
+    .conn-dot.error { background: var(--gate-closed); }
+
+    .phase-badge {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .phase-badge.visible { opacity: 1; }
+
+    /* ═══ MAIN CONTENT ═══ */
+    .main {
+      display: grid;
+      grid-template-columns: 280px 1fr 300px;
+      gap: 1px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    /* ═══ LEFT: AGENT PIPELINE ═══ */
+    .pipeline-panel {
+      background: var(--surface);
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .panel-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .agent-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      cursor: pointer;
+    }
+
+    .agent-card.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(129,140,248,0.1);
+    }
+
+    .agent-card.done {
+      border-color: var(--gate-open);
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .agent-icon {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .agent-icon.eeg { background: rgba(96,165,250,0.2); color: var(--eeg); }
+    .agent-icon.context { background: rgba(167,139,250,0.2); color: var(--context); }
+    .agent-icon.affective { background: rgba(244,114,182,0.2); color: var(--affective); }
+    .agent-icon.master { background: rgba(52,211,153,0.2); color: var(--master); }
+
+    .agent-info { flex: 1; min-width: 0; }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .agent-role {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .agent-status {
+      font-size: 9px;
+      font-weight: 500;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .agent-status.idle { background: var(--surface); color: var(--text-dim); }
+    .agent-status.thinking { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .agent-status.speaking { background: rgba(129,140,248,0.15); color: var(--accent); }
+    .agent-status.done { background: rgba(52,211,153,0.15); color: var(--gate-open); }
+
+    .pipeline-arrow {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 14px;
+      padding: 2px 0;
+      opacity: 0.4;
+    }
+
+    /* Release Gate */
+    .gate-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .gate-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .gate-value {
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .gate-value.open { color: var(--gate-open); }
+    .gate-value.closed { color: var(--gate-closed); }
+    .gate-value.pending { color: var(--text-dim); }
+
+    /* ═══ CENTER: AGENT OUTPUT STREAM ═══ */
+    .output-panel {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .output-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }
+
+    .output-tabs {
+      display: flex;
+      gap: 2px;
+    }
+
+    .output-tab {
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-dim);
+      border: none;
+      background: none;
+      transition: all 0.2s;
+    }
+
+    .output-tab:hover { color: var(--text); background: var(--surface-2); }
+    .output-tab.active { color: var(--text); background: var(--surface-2); }
+
+    .output-stream {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .output-stream::-webkit-scrollbar { width: 6px; }
+    .output-stream::-webkit-scrollbar-track { background: transparent; }
+    .output-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .stream-entry {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--surface);
+      border-left: 3px solid var(--border);
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .stream-entry.eeg { border-left-color: var(--eeg); }
+    .stream-entry.context { border-left-color: var(--context); }
+    .stream-entry.affective { border-left-color: var(--affective); }
+    .stream-entry.master { border-left-color: var(--master); }
+
+    .stream-agent-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .stream-agent-label.eeg { color: var(--eeg); }
+    .stream-agent-label.context { color: var(--context); }
+    .stream-agent-label.affective { color: var(--affective); }
+    .stream-agent-label.master { color: var(--master); }
+
+    .stream-content {
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* ═══ RIGHT: INPUT & STATE ═══ */
+    .input-panel {
+      background: var(--surface);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .input-section {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .input-section label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 8px 10px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--accent);
+      background: rgba(129,140,248,0.1);
+      color: var(--accent);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: rgba(129,140,248,0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn.secondary {
+      border-color: var(--border);
+      background: var(--surface-2);
+      color: var(--text-dim);
+    }
+
+    /* Affective State Summary */
+    .state-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .vad-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .vad-item {
+      text-align: center;
+    }
+
+    .vad-label {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .vad-value {
+      font-size: 20px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .relational-bars {
+      margin-top: 10px;
+    }
+
+    .rel-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .rel-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      min-width: 70px;
+    }
+
+    .rel-track {
+      flex: 1;
+      height: 4px;
+      background: var(--bg);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .rel-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: width 0.5s ease;
+    }
+
+    .rel-num {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    /* ═══ FOOTER ═══ */
+    footer {
+      padding: 8px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .processing { animation: pulse 1.2s ease infinite; }
+
+    /* ═══ DEAP SIMULATION ═══ */
+    .deap-controls {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .deap-controls select, .deap-controls input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 5px 8px;
+    }
+
+    .deap-controls select { flex: 1; min-width: 70px; }
+    .deap-controls input[type="number"] { width: 56px; }
+    .deap-controls select:focus, .deap-controls input:focus { outline: none; border-color: var(--accent); }
+
+    .deap-transport {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .deap-transport button {
+      flex: 1;
+      padding: 7px 4px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: var(--text-dim);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .deap-transport button:hover { border-color: var(--accent); color: var(--text); }
+    .deap-transport button.active { border-color: var(--gate-open); color: var(--gate-open); background: rgba(52,211,153,0.1); }
+    .deap-transport button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .deap-progress {
+      margin-top: 8px;
+    }
+
+    .deap-progress-track {
+      width: 100%;
+      height: 4px;
+      background: var(--bg);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .deap-progress-fill {
+      height: 100%;
+      background: var(--eeg);
+      border-radius: 2px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    .deap-progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ground-truth {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .gt-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    .gt-label { color: var(--text-dim); }
+    .gt-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+    /* Feature bars */
+    .feature-bars { margin-top: 6px; }
+
+    .feat-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+
+    .feat-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      min-width: 90px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .feat-track {
+      flex: 1;
+      height: 6px;
+      background: var(--bg);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .feat-fill {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.4s, left 0.4s;
+    }
+
+    .feat-num {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      min-width: 52px;
+      text-align: right;
+    }
+
+    /* Band power mini chart */
+    .band-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      margin-top: 6px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .band-cell {
+      text-align: center;
+      padding: 3px 2px;
+      background: var(--bg);
+      border-radius: 3px;
+      font-size: 9px;
+    }
+
+    .band-cell .ch { color: var(--text-dim); margin-bottom: 2px; }
+    .band-cell .bv { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+    .band-cell .bv.alpha { color: var(--eeg); }
+    .band-cell .bv.beta { color: var(--affective); }
+    .band-cell .bv.theta { color: var(--context); }
+
+    .tab-row {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 6px;
+    }
+
+    .tab-row button {
+      flex: 1;
+      padding: 4px;
+      border: none;
+      background: none;
+      color: var(--text-dim);
+      font-size: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab-row button.active { color: var(--text); border-bottom-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ═══ HEADER ═══ -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">E</div>
+      <div>
+        <div class="logo-text">Empathetic Robot Framework</div>
+        <div class="logo-sub">Real-time Affective Computing</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="phase-badge" id="phase-badge">Idle</div>
+      <div class="conn-badge">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span id="conn-label">connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="main">
+
+    <!-- LEFT: Pipeline -->
+    <div class="pipeline-panel">
+      <div class="panel-title">Agent Pipeline</div>
+
+      <div class="agent-card" id="agent-eeg" onclick="selectAgent('eeg')">
+        <div class="agent-header">
+          <div class="agent-icon eeg">E</div>
+          <div class="agent-info">
+            <div class="agent-name">EEG Agent</div>
+            <div class="agent-role">Signal Processing</div>
+          </div>
+          <span class="agent-status idle" id="status-eeg">idle</span>
+        </div>
+      </div>
+
+      <div class="pipeline-arrow">&#8595;</div>
+
+      <div class="agent-card" id="agent-context" onclick="selectAgent('context')">
+        <div class="agent-header">
+          <div class="agent-icon context">C</div>
+          <div class="agent-info">
+            <div class="agent-name">Context Agent</div>
+            <div class="agent-role">Contamination Monitor</div>
+          </div>
+          <span class="agent-status idle" id="status-context">idle</span>
+        </div>
+      </div>
+
+      <div class="pipeline-arrow">&#8595;</div>
+
+      <div class="agent-card" id="agent-affective" onclick="selectAgent('affective')">
+        <div class="agent-header">
+          <div class="agent-icon affective">A</div>
+          <div class="agent-info">
+            <div class="agent-name">Affective Agent</div>
+            <div class="agent-role">Emotion Synthesis</div>
+          </div>
+          <span class="agent-status idle" id="status-affective">idle</span>
+        </div>
+      </div>
+
+      <div class="pipeline-arrow">&#8595;</div>
+
+      <div class="agent-card" id="agent-master" onclick="selectAgent('master')">
+        <div class="agent-header">
+          <div class="agent-icon master">M</div>
+          <div class="agent-info">
+            <div class="agent-name">Master Neuroscientist</div>
+            <div class="agent-role">Review & Gating</div>
+          </div>
+          <span class="agent-status idle" id="status-master">idle</span>
+        </div>
+      </div>
+
+      <!-- Release Gate -->
+      <div class="gate-card">
+        <div class="gate-label">Release Gate</div>
+        <div class="gate-value pending" id="gate-value">---</div>
+      </div>
+    </div>
+
+    <!-- CENTER: Output Stream -->
+    <div class="output-panel">
+      <div class="output-header">
+        <div class="panel-title" style="margin:0">Agent Output Stream</div>
+        <div class="output-tabs">
+          <button class="output-tab active" onclick="setOutputFilter('all', this)">All</button>
+          <button class="output-tab" onclick="setOutputFilter('eeg', this)">EEG</button>
+          <button class="output-tab" onclick="setOutputFilter('context', this)">Context</button>
+          <button class="output-tab" onclick="setOutputFilter('affective', this)">Affective</button>
+          <button class="output-tab" onclick="setOutputFilter('master', this)">Master</button>
+        </div>
+      </div>
+      <div class="output-stream" id="output-stream">
+        <div style="text-align:center; color:var(--text-dim); padding:40px; font-family:Inter,sans-serif; font-size:13px;">
+          Start a DEAP simulation, then click Analyze to run the agent pipeline
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: DEAP Simulation & State -->
+    <div class="input-panel">
+      <div class="panel-title">DEAP Simulation</div>
+
+      <!-- Participant / Trial Selection -->
+      <div class="input-section">
+        <label>Dataset</label>
+        <div class="deap-controls">
+          <select id="deap-participant">
+            <option value="">Load participants...</option>
+          </select>
+          <select id="deap-trial">
+            <option value="0">Trial 0</option>
+          </select>
+          <input type="number" id="deap-rate" value="2" min="0.5" max="10" step="0.5" title="Playback speed">
+          <span style="font-size:10px;color:var(--text-dim);align-self:center">x</span>
+        </div>
+        <div class="deap-transport">
+          <button id="deap-btn-play" onclick="deapStart()" title="Play">&#9654;</button>
+          <button id="deap-btn-pause" onclick="deapPause()" disabled title="Pause">&#9646;&#9646;</button>
+          <button id="deap-btn-stop" onclick="deapStop()" disabled title="Stop">&#9632;</button>
+          <button id="deap-btn-analyze" onclick="deapAnalyze()" disabled title="Run Agent Pipeline on Current Window">&#9881; Analyze</button>
+        </div>
+        <div class="deap-progress">
+          <div class="deap-progress-track"><div class="deap-progress-fill" id="deap-progress-fill"></div></div>
+          <div class="deap-progress-info">
+            <span id="deap-time">0.0s</span>
+            <span id="deap-window-idx">Window --</span>
+            <span id="deap-sim-status">idle</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ground Truth (from DEAP labels) -->
+      <div class="input-section">
+        <label>Ground Truth (Self-Report)</label>
+        <div class="ground-truth">
+          <div class="gt-item"><span class="gt-label">Valence</span><span class="gt-val" id="gt-valence">---</span></div>
+          <div class="gt-item"><span class="gt-label">Arousal</span><span class="gt-val" id="gt-arousal">---</span></div>
+          <div class="gt-item"><span class="gt-label">Dominance</span><span class="gt-val" id="gt-dominance">---</span></div>
+          <div class="gt-item"><span class="gt-label">Liking</span><span class="gt-val" id="gt-liking">---</span></div>
+        </div>
+      </div>
+
+      <!-- Live EEG Features -->
+      <div class="panel-title" style="margin-top: 4px">Extracted Features</div>
+      <div class="input-section" style="padding: 8px 12px">
+        <div class="feature-bars">
+          <div class="feat-bar">
+            <span class="feat-label">F. Asymmetry</span>
+            <div class="feat-track"><div class="feat-fill" id="feat-asymmetry" style="width:0%;left:50%;background:var(--eeg)"></div></div>
+            <span class="feat-num" id="num-asymmetry">---</span>
+          </div>
+          <div class="feat-bar">
+            <span class="feat-label">Alpha/Beta</span>
+            <div class="feat-track"><div class="feat-fill" id="feat-ab-ratio" style="width:0%;left:0;background:var(--context)"></div></div>
+            <span class="feat-num" id="num-ab-ratio">---</span>
+          </div>
+          <div class="feat-bar">
+            <span class="feat-label">F. Theta</span>
+            <div class="feat-track"><div class="feat-fill" id="feat-theta" style="width:0%;left:0;background:var(--affective)"></div></div>
+            <span class="feat-num" id="num-theta">---</span>
+          </div>
+          <div class="feat-bar">
+            <span class="feat-label">FT Stability</span>
+            <div class="feat-track"><div class="feat-fill" id="feat-stability" style="width:0%;left:0;background:var(--master)"></div></div>
+            <span class="feat-num" id="num-stability">---</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Band Powers -->
+      <div class="panel-title" style="margin-top: 4px">Band Powers</div>
+      <div class="input-section" style="padding: 8px 12px">
+        <div class="tab-row">
+          <button class="active" onclick="setBandTab('alpha',this)">Alpha</button>
+          <button onclick="setBandTab('beta',this)">Beta</button>
+          <button onclick="setBandTab('theta',this)">Theta</button>
+        </div>
+        <div class="band-grid" id="band-grid"></div>
+      </div>
+
+      <!-- Affective State (from agent pipeline) -->
+      <div class="panel-title" style="margin-top: 4px">Agent Affective State</div>
+      <div class="state-card" id="state-card">
+        <div class="vad-grid">
+          <div class="vad-item">
+            <div class="vad-label">Valence</div>
+            <div class="vad-value" id="vad-v">---</div>
+          </div>
+          <div class="vad-item">
+            <div class="vad-label">Arousal</div>
+            <div class="vad-value" id="vad-a">---</div>
+          </div>
+          <div class="vad-item">
+            <div class="vad-label">Dominance</div>
+            <div class="vad-value" id="vad-d">---</div>
+          </div>
+        </div>
+        <div class="relational-bars" id="relational-bars">
+          <div class="rel-bar"><span class="rel-label">Comfort</span><div class="rel-track"><div class="rel-fill" id="rel-comfort" style="width:0%"></div></div><span class="rel-num" id="num-comfort">---</span></div>
+          <div class="rel-bar"><span class="rel-label">Calm</span><div class="rel-track"><div class="rel-fill" id="rel-calm" style="width:0%"></div></div><span class="rel-num" id="num-calm">---</span></div>
+          <div class="rel-bar"><span class="rel-label">Trust</span><div class="rel-track"><div class="rel-fill" id="rel-trust" style="width:0%"></div></div><span class="rel-num" id="num-trust">---</span></div>
+          <div class="rel-bar"><span class="rel-label">Engagement</span><div class="rel-track"><div class="rel-fill" id="rel-engagement" style="width:0%"></div></div><span class="rel-num" id="num-engagement">---</span></div>
+          <div class="rel-bar"><span class="rel-label">Clarity</span><div class="rel-track"><div class="rel-fill" id="rel-clarity" style="width:0%"></div></div><span class="rel-num" id="num-clarity">---</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer>
+    <span id="footer-status">Ready</span>
+    <span>ws://localhost:8765</span>
+  </footer>
+</div>
+
+<!-- ═══════════════════ SCRIPTS ═══════════════════ -->
+<script>
+// ═══════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════
+const WS_URL = 'ws://localhost:8765';
+const TRIAL_DURATION = 63; // DEAP trial duration in seconds
+
+const AGENT_NAMES = {
+  eeg: 'EEG Agent',
+  context: 'Context Agent',
+  affective: 'Affective Agent',
+  master: 'Master Neuroscientist',
+};
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let ws = null;
+let reconnectTimer = null;
+let outputFilter = 'all';
+let agentOutputs = {};
+let pipelineRunning = false;
+let deapState = 'idle'; // idle | playing | paused | stopped
+let currentBandTab = 'alpha';
+let lastBandPowers = {};
+
+// ═══════════════════════════════════════════
+// WEBSOCKET
+// ═══════════════════════════════════════════
+function connectWS() {
+  if (ws && ws.readyState <= 1) return;
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    setConnStatus(true);
+    clearTimeout(reconnectTimer);
+    setFooter('Connected');
+    // Request participant list on connect
+    wsSend({ type: 'deap_list' });
+  };
+
+  ws.onclose = () => {
+    setConnStatus(false);
+    reconnectTimer = setTimeout(connectWS, 3000);
+    setFooter('Disconnected — reconnecting...');
+  };
+
+  ws.onerror = () => setConnStatus(false, true);
+
+  ws.onmessage = (event) => {
+    try {
+      handleServerMessage(JSON.parse(event.data));
+    } catch (e) {
+      console.error('Parse error:', e);
+    }
+  };
+}
+
+function wsSend(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+function setConnStatus(connected, error = false) {
+  const dot = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+  dot.className = 'conn-dot' + (connected ? ' connected' : error ? ' error' : '');
+  label.textContent = connected ? 'connected' : error ? 'error' : 'reconnecting';
+}
+
+// ═══════════════════════════════════════════
+// SERVER MESSAGE HANDLER
+// ═══════════════════════════════════════════
+function handleServerMessage(msg) {
+  switch (msg.type) {
+
+    case 'phase':
+      setPhase(msg.phase);
+      setFooter(msg.label || msg.phase);
+      break;
+
+    case 'agent_thinking':
+      setAgentStatus(msg.agent_id, 'thinking');
+      setAgentCardActive(msg.agent_id, true);
+      setFooter(`${AGENT_NAMES[msg.agent_id] || msg.agent_id} analyzing...`);
+      break;
+
+    case 'agent_speaking':
+      setAgentStatus(msg.agent_id, 'speaking');
+      updateStreamEntry(msg.agent_id, msg.text);
+      break;
+
+    case 'agent_done':
+      setAgentStatus(msg.agent_id, 'done');
+      setAgentCardActive(msg.agent_id, false);
+      agentOutputs[msg.agent_id] = getLatestOutput(msg.agent_id);
+      break;
+
+    case 'pipeline_result':
+      pipelineRunning = false;
+      document.getElementById('deap-btn-analyze').disabled = (deapState !== 'playing' && deapState !== 'paused');
+      updateGate(msg.release_gate);
+      updateAffectiveDisplay(msg.affective_state);
+      setPhase('Complete');
+      setFooter('Pipeline complete');
+      break;
+
+    case 'error':
+      setFooter('Error: ' + msg.message);
+      pipelineRunning = false;
+      break;
+
+    // ── DEAP messages ──
+    case 'deap_participants':
+      populateParticipants(msg.participants);
+      break;
+
+    case 'deap_window':
+      handleDeapWindow(msg);
+      break;
+
+    case 'deap_status':
+      handleDeapStatus(msg.status);
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════
+// DEAP SIMULATION CONTROLS
+// ═══════════════════════════════════════════
+function populateParticipants(list) {
+  const sel = document.getElementById('deap-participant');
+  sel.innerHTML = '';
+  list.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    sel.appendChild(opt);
+  });
+  // Populate trials
+  const tSel = document.getElementById('deap-trial');
+  tSel.innerHTML = '';
+  for (let i = 0; i < 40; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = 'Trial ' + i;
+    tSel.appendChild(opt);
+  }
+  setFooter(`${list.length} participants loaded`);
+}
+
+function deapStart() {
+  const participant = document.getElementById('deap-participant').value;
+  const trial = parseInt(document.getElementById('deap-trial').value);
+  const rate = parseFloat(document.getElementById('deap-rate').value) || 2.0;
+  if (!participant) { setFooter('Select a participant'); return; }
+
+  clearStream();
+  resetAgentStatuses();
+  resetAffectiveDisplay();
+  resetFeatures();
+  updateGate(null);
+
+  wsSend({
+    type: 'deap_start',
+    participant_id: participant,
+    trial_id: trial,
+    playback_rate: rate,
+  });
+  setFooter(`Starting ${participant} trial ${trial} @ ${rate}x...`);
+}
+
+function deapPause() {
+  wsSend({ type: 'deap_pause' });
+}
+
+function deapStop() {
+  wsSend({ type: 'deap_stop' });
+}
+
+function deapAnalyze() {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  document.getElementById('deap-btn-analyze').disabled = true;
+  clearStream();
+  resetAgentStatuses();
+  resetAffectiveDisplay();
+  updateGate(null);
+  setPhase('Starting');
+  setFooter('Running agent pipeline...');
+  wsSend({ type: 'deap_analyze' });
+}
+
+function handleDeapStatus(status) {
+  deapState = status;
+  document.getElementById('deap-sim-status').textContent = status;
+
+  const btnPlay = document.getElementById('deap-btn-play');
+  const btnPause = document.getElementById('deap-btn-pause');
+  const btnStop = document.getElementById('deap-btn-stop');
+  const btnAnalyze = document.getElementById('deap-btn-analyze');
+
+  btnPlay.disabled = (status === 'playing');
+  btnPlay.classList.toggle('active', status === 'playing');
+  btnPause.disabled = (status !== 'playing');
+  btnStop.disabled = (status === 'idle' || status === 'stopped');
+  btnAnalyze.disabled = (status !== 'playing' && status !== 'paused') || pipelineRunning;
+
+  if (status === 'stopped' || status === 'idle') {
+    setFooter(status === 'stopped' ? 'Simulation stopped' : 'Ready');
+  }
+}
+
+function handleDeapWindow(msg) {
+  // Update progress
+  const pct = Math.min(100, ((msg.end_time || 0) / TRIAL_DURATION) * 100);
+  document.getElementById('deap-progress-fill').style.width = pct + '%';
+  document.getElementById('deap-time').textContent = (msg.start_time || 0).toFixed(1) + 's';
+  document.getElementById('deap-window-idx').textContent = 'Window ' + (msg.window_index ?? '--');
+
+  // Ground truth
+  if (msg.metadata) {
+    document.getElementById('gt-valence').textContent = msg.metadata.valence ?? '---';
+    document.getElementById('gt-arousal').textContent = msg.metadata.arousal ?? '---';
+    document.getElementById('gt-dominance').textContent = msg.metadata.dominance ?? '---';
+    document.getElementById('gt-liking').textContent = msg.metadata.liking ?? '---';
+  }
+
+  // Features
+  if (msg.features) updateFeatureBars(msg.features);
+
+  // Band powers
+  if (msg.band_powers) {
+    lastBandPowers = msg.band_powers;
+    renderBandGrid(currentBandTab);
+  }
+
+  setFooter(`Window ${msg.window_index} | ${(msg.start_time||0).toFixed(1)}-${(msg.end_time||0).toFixed(1)}s`);
+}
+
+// ═══════════════════════════════════════════
+// FEATURE VISUALIZATION
+// ═══════════════════════════════════════════
+function updateFeatureBars(f) {
+  // Frontal asymmetry: centered bar (can be negative)
+  setAsymmetryBar('feat-asymmetry', 'num-asymmetry', f.frontal_asymmetry);
+  // Alpha/beta ratio: 0 to ~5 range
+  setLinearBar('feat-ab-ratio', 'num-ab-ratio', f.alpha_beta_ratio, 0, 5);
+  // Frontal theta: 0 to ~50 range
+  setLinearBar('feat-theta', 'num-theta', f.frontal_theta_proxy, 0, 50);
+  // FT stability: 0 to 1 range
+  setLinearBar('feat-stability', 'num-stability', f.frontotemporal_stability, 0, 1);
+}
+
+function setAsymmetryBar(fillId, numId, val) {
+  const fill = document.getElementById(fillId);
+  const num = document.getElementById(numId);
+  if (val == null) { fill.style.width = '0%'; num.textContent = '---'; return; }
+  // Map -10..+10 to visual
+  const norm = Math.max(-1, Math.min(1, val / 10));
+  const w = Math.abs(norm) * 50;
+  fill.style.width = w + '%';
+  fill.style.left = norm >= 0 ? '50%' : (50 - w) + '%';
+  num.textContent = val.toFixed(3);
+}
+
+function setLinearBar(fillId, numId, val, min, max) {
+  const fill = document.getElementById(fillId);
+  const num = document.getElementById(numId);
+  if (val == null) { fill.style.width = '0%'; num.textContent = '---'; return; }
+  const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+  fill.style.width = pct + '%';
+  fill.style.left = '0';
+  num.textContent = val.toFixed(3);
+}
+
+function resetFeatures() {
+  ['feat-asymmetry', 'feat-ab-ratio', 'feat-theta', 'feat-stability'].forEach(id => {
+    document.getElementById(id).style.width = '0%';
+  });
+  ['num-asymmetry', 'num-ab-ratio', 'num-theta', 'num-stability'].forEach(id => {
+    document.getElementById(id).textContent = '---';
+  });
+  ['gt-valence', 'gt-arousal', 'gt-dominance', 'gt-liking'].forEach(id => {
+    document.getElementById(id).textContent = '---';
+  });
+  document.getElementById('deap-progress-fill').style.width = '0%';
+  document.getElementById('deap-time').textContent = '0.0s';
+  document.getElementById('deap-window-idx').textContent = 'Window --';
+  lastBandPowers = {};
+  renderBandGrid(currentBandTab);
+}
+
+// ═══════════════════════════════════════════
+// BAND POWER GRID
+// ═══════════════════════════════════════════
+function setBandTab(band, btn) {
+  currentBandTab = band;
+  document.querySelectorAll('.tab-row button').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderBandGrid(band);
+}
+
+function renderBandGrid(band) {
+  const grid = document.getElementById('band-grid');
+  const channels = Object.keys(lastBandPowers);
+  if (!channels.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-dim);font-size:10px;padding:8px">No data</div>';
+    return;
+  }
+  grid.innerHTML = channels.map(ch => {
+    const bp = lastBandPowers[ch];
+    const val = bp ? bp[band] : null;
+    return `<div class="band-cell"><div class="ch">${ch}</div><div class="bv ${band}">${val != null ? val.toFixed(2) : '--'}</div></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════
+function setPhase(text) {
+  const el = document.getElementById('phase-badge');
+  el.textContent = text;
+  el.classList.toggle('visible', !!text);
+}
+
+function setFooter(text) {
+  document.getElementById('footer-status').textContent = text;
+}
+
+function setAgentStatus(id, status) {
+  const el = document.getElementById('status-' + id);
+  if (!el) return;
+  el.className = 'agent-status ' + status;
+  el.textContent = status;
+}
+
+function setAgentCardActive(id, active) {
+  const card = document.getElementById('agent-' + id);
+  if (!card) return;
+  if (active) card.classList.add('active');
+  else card.classList.remove('active');
+}
+
+function resetAgentStatuses() {
+  ['eeg', 'context', 'affective', 'master'].forEach(id => {
+    setAgentStatus(id, 'idle');
+    const card = document.getElementById('agent-' + id);
+    if (card) card.classList.remove('active', 'done');
+  });
+}
+
+function updateGate(value) {
+  const el = document.getElementById('gate-value');
+  if (value === null || value === undefined) {
+    el.textContent = '---';
+    el.className = 'gate-value pending';
+  } else if (value) {
+    el.textContent = 'OPEN';
+    el.className = 'gate-value open';
+  } else {
+    el.textContent = 'CLOSED';
+    el.className = 'gate-value closed';
+  }
+}
+
+// ═══════════════════════════════════════════
+// OUTPUT STREAM
+// ═══════════════════════════════════════════
+function clearStream() {
+  document.getElementById('output-stream').innerHTML = '';
+  agentOutputs = {};
+}
+
+function updateStreamEntry(agentId, text) {
+  const stream = document.getElementById('output-stream');
+  let entry = document.getElementById('stream-' + agentId);
+
+  if (!entry) {
+    entry = document.createElement('div');
+    entry.id = 'stream-' + agentId;
+    entry.className = 'stream-entry ' + agentId;
+    entry.innerHTML = `
+      <div class="stream-agent-label ${agentId}">${AGENT_NAMES[agentId] || agentId}</div>
+      <div class="stream-content"></div>
+    `;
+    stream.appendChild(entry);
+  }
+
+  entry.style.display = (outputFilter === 'all' || outputFilter === agentId) ? 'block' : 'none';
+
+  const content = entry.querySelector('.stream-content');
+  try {
+    const parsed = JSON.parse(text);
+    content.textContent = JSON.stringify(parsed, null, 2);
+  } catch {
+    content.textContent = text;
+  }
+
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function getLatestOutput(agentId) {
+  const entry = document.getElementById('stream-' + agentId);
+  if (!entry) return '';
+  return entry.querySelector('.stream-content')?.textContent || '';
+}
+
+function setOutputFilter(filter, btn) {
+  outputFilter = filter;
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  document.querySelectorAll('.stream-entry').forEach(el => {
+    if (filter === 'all') {
+      el.style.display = 'block';
+    } else {
+      el.style.display = el.classList.contains(filter) ? 'block' : 'none';
+    }
+  });
+}
+
+function selectAgent(id) {
+  setOutputFilter(id);
+  document.querySelectorAll('.output-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.toLowerCase().includes(id));
+  });
+}
+
+// ═══════════════════════════════════════════
+// AFFECTIVE STATE DISPLAY
+// ═══════════════════════════════════════════
+function updateAffectiveDisplay(state) {
+  if (!state) return;
+
+  const vad = state.vad || {};
+  const fmt = (v) => typeof v === 'number' ? v.toFixed(2) : '---';
+  document.getElementById('vad-v').textContent = fmt(vad.valence);
+  document.getElementById('vad-a').textContent = fmt(vad.arousal);
+  document.getElementById('vad-d').textContent = fmt(vad.dominance);
+
+  const colorVal = (elId, v) => {
+    const el = document.getElementById(elId);
+    if (typeof v !== 'number') return;
+    el.style.color = v > 0.2 ? 'var(--gate-open)' : v < -0.2 ? 'var(--gate-closed)' : 'var(--text)';
+  };
+  colorVal('vad-v', vad.valence);
+  colorVal('vad-a', vad.arousal);
+  colorVal('vad-d', vad.dominance);
+
+  const rel = state.relational || {};
+  ['comfort', 'calm', 'trust', 'engagement', 'clarity'].forEach(dim => {
+    const val = rel[dim];
+    if (typeof val === 'number') {
+      const pct = Math.max(0, Math.min(100, val * 100));
+      document.getElementById('rel-' + dim).style.width = pct + '%';
+      document.getElementById('num-' + dim).textContent = val.toFixed(2);
+    }
+  });
+}
+
+function resetAffectiveDisplay() {
+  ['vad-v', 'vad-a', 'vad-d'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = '---';
+    el.style.color = '';
+  });
+  ['comfort', 'calm', 'trust', 'engagement', 'clarity'].forEach(dim => {
+    document.getElementById('rel-' + dim).style.width = '0%';
+    document.getElementById('num-' + dim).textContent = '---';
+  });
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+connectWS();
+</script>
+</body>
+</html>
