@@ -33,6 +33,28 @@
 
   <button id="mode-toggle-btn" class="mode-toggle-btn" type="button"></button>
 
+  <!-- Voice Agent: Persona Selector (shown before XR session) -->
+  <div id="persona-overlay" class="persona-overlay hidden">
+    <div class="persona-title">GREYMETA</div>
+    <div class="persona-subtitle">Select interaction mode</div>
+    <div class="persona-grid" id="persona-grid"></div>
+    <button id="persona-confirm" class="persona-confirm" disabled>Enter Experience →</button>
+  </div>
+
+  <!-- Voice Agent: Session Controls (shown during XR) -->
+  <div id="voice-hud" class="voice-hud hidden">
+    <div id="eeg-readout" class="eeg-readout"></div>
+    <div class="voice-hud-row">
+      <button id="voice-btn" class="voice-btn" type="button">🎙 Start Session</button>
+      <span id="voice-status" class="voice-status">idle</span>
+    </div>
+    <div class="voice-hud-row voice-sim-row">
+      <button class="sim-btn" onclick="window._injectSim?.('calm')">🧘 calm</button>
+      <button class="sim-btn" onclick="window._injectSim?.('anxious')">⚡ anxious</button>
+      <button class="sim-btn" onclick="window._injectSim?.('engaged')">🚀 engaged</button>
+    </div>
+  </div>
+
   <!-- Fallback for unsupported devices -->
   <div id="fallback-message" class="fallback-message hidden">
     <p>This device does not support immersive VR.</p>

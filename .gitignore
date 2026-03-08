@@ -27,3 +27,17 @@ __pycache__/
 
 # Windsurf plans (local only)
 .windsurf/plans/
+
+*.env
+*.env.local
+#all the environments in the project ignored by git
+
+# Voice config (contains API keys)
+js/voice-config.js
+
+# External app directories
+slab28-bate-main/
+app/
+
+# Agent output (generated data)
+agents/output/

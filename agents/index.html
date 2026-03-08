@@ -786,52 +786,86 @@
       </div>
       <div class="output-stream" id="output-stream">
         <div style="text-align:center; color:var(--text-dim); padding:40px; font-family:Inter,sans-serif; font-size:13px;">
-          Start a DEAP simulation, then click Analyze to run the agent pipeline
+          Select a source (DEAP or Live Muse), start streaming, then click Analyze to run the agent pipeline
         </div>
       </div>
     </div>
 
-    <!-- RIGHT: DEAP Simulation & State -->
+    <!-- RIGHT: EEG Source & State -->
     <div class="input-panel">
-      <div class="panel-title">DEAP Simulation</div>
+      <!-- Source Selector Tabs -->
+      <div class="tab-row" id="source-tabs" style="margin-bottom:0;border-bottom:1px solid var(--border);padding-bottom:2px">
+        <button class="active" onclick="setSource('deap',this)">DEAP Dataset</button>
+        <button onclick="setSource('muse',this)">Live Muse EEG</button>
+      </div>
 
-      <!-- Participant / Trial Selection -->
-      <div class="input-section">
-        <label>Dataset</label>
-        <div class="deap-controls">
-          <select id="deap-participant">
-            <option value="">Load participants...</option>
-          </select>
-          <select id="deap-trial">
-            <option value="0">Trial 0</option>
-          </select>
-          <input type="number" id="deap-rate" value="2" min="0.5" max="10" step="0.5" title="Playback speed">
-          <span style="font-size:10px;color:var(--text-dim);align-self:center">x</span>
+      <!-- ══ DEAP Source Panel ══ -->
+      <div id="source-deap">
+        <div class="panel-title" style="margin-top:6px">DEAP Simulation</div>
+        <div class="input-section">
+          <label>Dataset</label>
+          <div class="deap-controls">
+            <select id="deap-participant">
+              <option value="">Load participants...</option>
+            </select>
+            <select id="deap-trial">
+              <option value="0">Trial 0</option>
+            </select>
+            <input type="number" id="deap-rate" value="2" min="0.5" max="10" step="0.5" title="Playback speed">
+            <span style="font-size:10px;color:var(--text-dim);align-self:center">x</span>
+          </div>
+          <div class="deap-transport">
+            <button id="deap-btn-play" onclick="deapStart()" title="Play">&#9654;</button>
+            <button id="deap-btn-pause" onclick="deapPause()" disabled title="Pause">&#9646;&#9646;</button>
+            <button id="deap-btn-stop" onclick="deapStop()" disabled title="Stop">&#9632;</button>
+            <button id="deap-btn-analyze" onclick="deapAnalyze()" disabled title="Run Agent Pipeline on Current Window">&#9881; Analyze</button>
+          </div>
+          <div class="deap-progress">
+            <div class="deap-progress-track"><div class="deap-progress-fill" id="deap-progress-fill"></div></div>
+            <div class="deap-progress-info">
+              <span id="deap-time">0.0s</span>
+              <span id="deap-window-idx">Window --</span>
+              <span id="deap-sim-status">idle</span>
+            </div>
+          </div>
         </div>
-        <div class="deap-transport">
-          <button id="deap-btn-play" onclick="deapStart()" title="Play">&#9654;</button>
-          <button id="deap-btn-pause" onclick="deapPause()" disabled title="Pause">&#9646;&#9646;</button>
-          <button id="deap-btn-stop" onclick="deapStop()" disabled title="Stop">&#9632;</button>
-          <button id="deap-btn-analyze" onclick="deapAnalyze()" disabled title="Run Agent Pipeline on Current Window">&#9881; Analyze</button>
-        </div>
-        <div class="deap-progress">
-          <div class="deap-progress-track"><div class="deap-progress-fill" id="deap-progress-fill"></div></div>
-          <div class="deap-progress-info">
-            <span id="deap-time">0.0s</span>
-            <span id="deap-window-idx">Window --</span>
-            <span id="deap-sim-status">idle</span>
+        <div class="input-section">
+          <label>Ground Truth (Self-Report)</label>
+          <div class="ground-truth">
+            <div class="gt-item"><span class="gt-label">Valence</span><span class="gt-val" id="gt-valence">---</span></div>
+            <div class="gt-item"><span class="gt-label">Arousal</span><span class="gt-val" id="gt-arousal">---</span></div>
+            <div class="gt-item"><span class="gt-label">Dominance</span><span class="gt-val" id="gt-dominance">---</span></div>
+            <div class="gt-item"><span class="gt-label">Liking</span><span class="gt-val" id="gt-liking">---</span></div>
           </div>
         </div>
       </div>
 
-      <!-- Ground Truth (from DEAP labels) -->
-      <div class="input-section">
-        <label>Ground Truth (Self-Report)</label>
-        <div class="ground-truth">
-          <div class="gt-item"><span class="gt-label">Valence</span><span class="gt-val" id="gt-valence">---</span></div>
-          <div class="gt-item"><span class="gt-label">Arousal</span><span class="gt-val" id="gt-arousal">---</span></div>
-          <div class="gt-item"><span class="gt-label">Dominance</span><span class="gt-val" id="gt-dominance">---</span></div>
-          <div class="gt-item"><span class="gt-label">Liking</span><span class="gt-val" id="gt-liking">---</span></div>
+      <!-- ══ Live Muse Source Panel ══ -->
+      <div id="source-muse" style="display:none">
+        <div class="panel-title" style="margin-top:6px">Live Muse EEG</div>
+        <div class="input-section">
+          <label>Channels: TP9, AF7, AF8, TP10 @ 256 Hz</label>
+          <div class="deap-transport">
+            <button id="muse-btn-connect" onclick="museStart()" title="Connect to LSL stream">&#9654; Connect</button>
+            <button id="muse-btn-stop" onclick="museStop()" disabled title="Disconnect">&#9632; Stop</button>
+            <button id="muse-btn-analyze" onclick="museAnalyze()" disabled title="Run Agent Pipeline on Current Window">&#9881; Analyze</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px">
+              <input type="checkbox" id="muse-auto-analyze" checked style="accent-color:var(--eeg)">
+              Auto-Analyze
+            </label>
+            <span style="font-size:10px;color:var(--text-dim)">every</span>
+            <input type="number" id="muse-interval" value="15" min="10" max="120" step="5" style="width:48px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 6px;text-align:center">
+            <span style="font-size:10px;color:var(--text-dim)">sec</span>
+          </div>
+          <div class="deap-progress" style="margin-top:8px">
+            <div class="deap-progress-info">
+              <span id="muse-stream-name">--</span>
+              <span id="muse-window-idx">Window --</span>
+              <span id="muse-status">idle</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -932,6 +966,8 @@ let outputFilter = 'all';
 let agentOutputs = {};
 let pipelineRunning = false;
 let deapState = 'idle'; // idle | playing | paused | stopped
+let museState = 'idle'; // idle | connecting | connected | stopped
+let activeSource = 'deap'; // deap | muse
 let currentBandTab = 'alpha';
 let lastBandPowers = {};
 
@@ -1009,6 +1045,7 @@ function handleServerMessage(msg) {
     case 'pipeline_result':
       pipelineRunning = false;
       document.getElementById('deap-btn-analyze').disabled = (deapState !== 'playing' && deapState !== 'paused');
+      document.getElementById('muse-btn-analyze').disabled = (museState !== 'connected');
       updateGate(msg.release_gate);
       updateAffectiveDisplay(msg.affective_state);
       setPhase('Complete');
@@ -1031,6 +1068,31 @@ function handleServerMessage(msg) {
 
     case 'deap_status':
       handleDeapStatus(msg.status);
+      break;
+
+    case 'voice_output_saved':
+      setFooter('Voice output saved: ' + (msg.path || '').split(/[/\\]/).pop());
+      console.log('Voice output saved:', msg.path, msg.voice_output);
+      break;
+
+    // ── Muse messages ──
+    case 'muse_window':
+      handleMuseWindow(msg);
+      break;
+
+    case 'muse_status':
+      handleMuseStatus(msg);
+      break;
+
+    case 'auto_analyze_start':
+      // Auto-triggered pipeline run — reset agent UI for new analysis
+      pipelineRunning = true;
+      clearStream();
+      resetAgentStatuses();
+      resetAffectiveDisplay();
+      updateGate(null);
+      setPhase('Auto-Analyzing');
+      setFooter(`Auto-analyzing window ${msg.window_index}...`);
       break;
   }
 }
@@ -1146,6 +1208,94 @@ function handleDeapWindow(msg) {
   }
 
   setFooter(`Window ${msg.window_index} | ${(msg.start_time||0).toFixed(1)}-${(msg.end_time||0).toFixed(1)}s`);
+}
+
+// ═══════════════════════════════════════════
+// SOURCE SWITCHER
+// ═══════════════════════════════════════════
+function setSource(src, btn) {
+  activeSource = src;
+  document.getElementById('source-deap').style.display = src === 'deap' ? '' : 'none';
+  document.getElementById('source-muse').style.display = src === 'muse' ? '' : 'none';
+  document.querySelectorAll('#source-tabs button').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  resetFeatures();
+}
+
+// ═══════════════════════════════════════════
+// LIVE MUSE CONTROLS
+// ═══════════════════════════════════════════
+function museStart() {
+  resetFeatures();
+  clearStream();
+  resetAgentStatuses();
+  resetAffectiveDisplay();
+  updateGate(null);
+  const autoAnalyze = document.getElementById('muse-auto-analyze').checked;
+  const interval = parseInt(document.getElementById('muse-interval').value) || 15;
+  wsSend({
+    type: 'muse_start',
+    auto_analyze: autoAnalyze,
+    analyze_interval: interval,
+  });
+  setFooter('Connecting to LSL EEG stream...' + (autoAnalyze ? ` (auto-analyze every ${interval}s)` : ''));
+}
+
+function museStop() {
+  wsSend({ type: 'muse_stop' });
+}
+
+function museAnalyze() {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  document.getElementById('muse-btn-analyze').disabled = true;
+  clearStream();
+  resetAgentStatuses();
+  resetAffectiveDisplay();
+  updateGate(null);
+  setPhase('Starting');
+  setFooter('Running agent pipeline on live EEG...');
+  wsSend({ type: 'muse_analyze' });
+}
+
+function handleMuseStatus(msg) {
+  museState = msg.status;
+  document.getElementById('muse-status').textContent = msg.status;
+
+  const btnConnect = document.getElementById('muse-btn-connect');
+  const btnStop = document.getElementById('muse-btn-stop');
+  const btnAnalyze = document.getElementById('muse-btn-analyze');
+
+  const streaming = (msg.status === 'connected');
+  btnConnect.disabled = streaming || msg.status === 'connecting';
+  btnConnect.classList.toggle('active', streaming);
+  btnStop.disabled = (msg.status === 'idle' || msg.status === 'stopped');
+  btnAnalyze.disabled = !streaming || pipelineRunning;
+
+  if (msg.stream_name) {
+    document.getElementById('muse-stream-name').textContent = msg.stream_name;
+  }
+
+  if (msg.status === 'stopped' || msg.status === 'idle') {
+    setFooter(msg.status === 'stopped' ? 'Muse stream stopped' : 'Ready');
+  } else if (msg.status === 'connecting') {
+    setFooter('Searching for LSL EEG stream...');
+  } else if (msg.status === 'connected') {
+    setFooter('Live EEG connected: ' + (msg.stream_name || 'EEG'));
+  }
+}
+
+function handleMuseWindow(msg) {
+  document.getElementById('muse-window-idx').textContent = 'Window ' + (msg.window_index ?? '--');
+
+  if (msg.features) updateFeatureBars(msg.features);
+
+  if (msg.band_powers) {
+    lastBandPowers = msg.band_powers;
+    renderBandGrid(currentBandTab);
+  }
+
+  setFooter(`Live | Window ${msg.window_index} | ${(msg.start_time||0).toFixed(1)}-${(msg.end_time||0).toFixed(1)}s`);
 }
 
 // ═══════════════════════════════════════════

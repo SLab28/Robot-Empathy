@@ -20,6 +20,9 @@ import { createTextPanel } from './vr-text-panel.js';
 
 console.log('[HIDDEN] AR app initialising');
 
+// Voice agent loaded lazily to avoid blocking the app if CDN is slow
+let VoiceAgent = null;
+
 const TREE_PLY_URL = 'assets/stjohn_originbase.ply';
 
 const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
@@ -43,6 +46,9 @@ let speechTranscript = '';
 let vrTextPanelMesh = null;
 const _billboardCamPos = new THREE.Vector3();
 const _panelFollowPos = new THREE.Vector3();
+
+// Voice agent state
+let voiceAgentReady = false;
 
 function smoothstep(min, max, value) {
   const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
@@ -204,6 +210,31 @@ function updateVoiceAudioUniforms() {
       `uLevel=${uniforms.sphereAudioLevel.value.toFixed(3)} uTimbre=${uniforms.sphereAudioTimbre.value.toFixed(3)}`
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// EEG Bridge: show live brain state in VR
+// ─────────────────────────────────────────────
+function initEegBridge() {
+  if (!VoiceAgent) return;
+
+  // Connect to agents/server.py WebSocket
+  VoiceAgent.connectEeg();
+
+  // Wire EEG updates → emotion colour on the VR panel
+  VoiceAgent.on('onEegUpdate', (eeg) => {
+    if (vrTextPanelMesh?.userData?.setColor) {
+      const c = VoiceAgent.eegToColor(eeg);
+      vrTextPanelMesh.userData.setColor(c.r, c.g, c.b, c.a);
+    }
+  });
+
+  VoiceAgent.on('onEegConnected', (connected) => {
+    console.log('[EEG] Bridge:', connected ? 'connected' : 'disconnected');
+  });
+
+  // Expose sim injection for inline onclick handlers
+  window._injectSim = (name) => VoiceAgent.injectSimState(name);
 }
 
 // --- UI helpers ---
@@ -518,6 +549,10 @@ function placeTree(hitPose) {
   // Start speech recognition for voice-to-text overlay
   initSpeechRecognition();
 
+  // Connect EEG bridge and show live brain state on the VR text panel
+  voiceAgentReady = true;
+  initEegBridge();
+
   // Start simple opacity fade-in
   startOpacityFadeIn();
 
@@ -584,7 +619,7 @@ function updateAnimations() {
 
   updateVoiceAudioUniforms();
 
-  // Follow sphere position + face the camera
+  // Emotion panel: follow sphere, face camera, animate colour
   if (vrTextPanelMesh && camera) {
     // Follow the sphere if it was grabbed/moved
     const sg = vrTextPanelMesh.userData._sphereGroup;
@@ -597,6 +632,11 @@ function updateAnimations() {
     const activeCamera = renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
     activeCamera.getWorldPosition(_billboardCamPos);
     vrTextPanelMesh.lookAt(_billboardCamPos);
+
+    // Smooth colour lerp each frame
+    if (vrTextPanelMesh.userData.tick) {
+      vrTextPanelMesh.userData.tick(0.016);
+    }
   }
 
   // Update ocean planar reflection pass (from frame_bubble environment).
@@ -652,6 +692,15 @@ async function init() {
   scene = sceneObjects.scene;
   camera = sceneObjects.camera;
   renderer = sceneObjects.renderer;
+
+  // Load EEG bridge module
+  try {
+    VoiceAgent = await import('./voice-agent.js');
+    console.log('[HIDDEN] EEG bridge module loaded');
+  } catch (err) {
+    console.warn('[HIDDEN] EEG bridge failed to load:', err?.message || err);
+    VoiceAgent = null;
+  }
 
   // Phase 0: Load point cloud
   try {
